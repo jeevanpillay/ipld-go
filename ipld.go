@@ -5,16 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	shell "github.com/ipfs/go-ipfs-api"
 )
+
+type SampleStruct struct {
+	ID     string `json:"ID"`
+	Name   string `json:"Name"`
+	Salary string `json:"Salary"`
+}
 
 // Global variable to handle all the IPFS API client calls
 var sh *shell.Shell
 
 func main() {
 	// key-value pair
-	keyValueMap := make(map[string]interface{})
+	DocStoreMap := make(map[string]SampleStruct)
 
 	// localnode: infura (change for localhost)
 	sh = shell.NewShell("https://ipfs.infura.io:5001")
@@ -23,13 +30,13 @@ func main() {
 	fmt.Println("This client generates a dynamic key-value entry and stores it in IPFS!")
 
 	// scan
-	inputKey, inputValue := ScanInput()
+	employee := ScanInput()
 
 	// set
-	keyValueMap[inputKey] = inputValue
+	DocStoreMap[employee.ID] = employee
 
 	// Converting into JSON object
-	entryJSON, err := json.Marshal(keyValueMap)
+	entryJSON, err := json.Marshal(DocStoreMap)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -40,40 +47,58 @@ func main() {
 	fmt.Println(jsonStr)
 
 	// Dag PUT operation which will return the CID for futher access or pinning etc.
+	start := time.Now()
 	cid, err := sh.DagPut(entryJSON, "json", "cbor")
+	elapsed := time.Since(start)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s", err)
 		os.Exit(1)
 	}
-	fmt.Println("------\nOUTPUT\n------")
-	fmt.Printf("WRITE: Successfully added %sHere's the IPLD Explorer link: https://explore.ipld.io/#/explore/%s \n", string(cid+"\n"), string(cid+"\n"))
 
-	// Fetch the details by reading the DAG for key "inputKey"
-	fmt.Printf("READ: Value for key \"%s\" is: ", inputKey)
-	res, err := GetDag(cid, inputKey)
+	// Outputs
+	fmt.Println("------\nOUTPUT\n------")
+	fmt.Printf("WRITE: Successfully added %sHere's the IPLD Explorer link: https://explore.ipld.io/#/explore/%s", string(cid+"\n"), string(cid+"\n"))
+	fmt.Println("WRITE: IPLD PUT call took ", elapsed)
+
+	// READ and get document
+	fmt.Printf("READ: Reading the document details of employee by ID: \"%s\"\n", employee.ID)
+	start = time.Now()
+	document, err := GetDocument(cid, employee.ID)
+	elapsed = time.Since(start)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(res)
 
+	fmt.Printf("READ: Salary of employee ID %s is %s\n", string(employee.ID), string(document.Salary))
+	fmt.Println("READ: IPLD GET call took ", elapsed)
 }
 
-// GetDag handles READ operations of a DAG entry by CID, returning the corresponding value
-func GetDag(ref, key string) (out interface{}, err error) {
+// GetDocument READ operations of a DAG entry by CID, returning the corresponding value
+func GetDocument(ref, key string) (out SampleStruct, err error) {
 	err = sh.DagGet(ref+"/"+key, &out)
 	return
 }
 
-func ScanInput() (string, string) {
+func ScanInput() SampleStruct {
 	scanner := bufio.NewScanner(os.Stdin)
 
-	fmt.Println("Enter value for the key field: ")
+	fmt.Println("Enter the ID of the Employee: ")
 	scanner.Scan()
-	inputKey := scanner.Text()
+	inputID := scanner.Text()
 
-	fmt.Println("Enter value for the value field: ")
+	fmt.Println("Enter the name of the Employee: ")
 	scanner.Scan()
-	inputValue := scanner.Text()
+	inputName := scanner.Text()
 
-	return inputKey, inputValue
+	fmt.Println("Enter the salary of the Employee: ")
+	scanner.Scan()
+	inputSalary := scanner.Text()
+
+	employee := SampleStruct{
+		ID:     inputID,
+		Name:   inputName,
+		Salary: inputSalary,
+	}
+
+	return employee
 }
